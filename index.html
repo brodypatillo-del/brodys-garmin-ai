@@ -407,7 +407,7 @@ async function syncGarmin(){
   const dot=document.getElementById('sync-dot'),lbl=document.getElementById('sync-lbl');
   dot.className='sync-dot loading';lbl.textContent='Syncing...';
   try{
-    const resp=await fetch('https://api.anthropic.com/v1/messages',{
+    const resp=await fetch('https://brody-proxy.brody-patillo.workers.dev',{
       method:'POST',
       headers:{'Content-Type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01'},
       body:JSON.stringify({
@@ -575,7 +575,7 @@ function clearLog(){document.getElementById('exercises-container').innerHTML='';
 // ═══ AI LOG (via Anthropic API directly — uses stored key) ═══
 async function callAI(prompt){
   const key=getApiKey();if(!key)throw new Error('No API key');
-  const resp=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01'},body:JSON.stringify({model:'claude-sonnet-4-5',max_tokens:1000,messages:[{role:'user',content:prompt}]})});
+  const resp=await fetch('https://brody-proxy.brody-patillo.workers.dev',{method:'POST',headers:{'Content-Type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01'},body:JSON.stringify({model:'claude-sonnet-4-5',max_tokens:1000,messages:[{role:'user',content:prompt}]})});
   const data=await resp.json();return data.content.map(b=>b.text||'').join('').replace(/```json|```/g,'').trim();
 }
 async function aiStructureWorkout(){
@@ -711,7 +711,7 @@ async function sendChat(){
   appendChat('u',msg);const typing=appendTyping();
   chatHistory.push({role:'user',content:msg});
   try{
-    const resp=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01'},body:JSON.stringify({model:'claude-sonnet-4-5',max_tokens:1000,system:getSystemPrompt(),messages:chatHistory})});
+    const resp=await fetch('https://brody-proxy.brody-patillo.workers.dev',{method:'POST',headers:{'Content-Type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01'},body:JSON.stringify({model:'claude-sonnet-4-5',max_tokens:1000,system:getSystemPrompt(),messages:chatHistory})});
     const data=await resp.json();const reply=data.content.map(b=>b.text||'').join('');
     typing.remove();appendChat('a',reply);chatHistory.push({role:'assistant',content:reply});
   }catch(e){typing.remove();appendChat('a','Connection issue — check your API key in Settings and try again.');}
