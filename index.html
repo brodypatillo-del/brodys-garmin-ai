@@ -401,27 +401,36 @@ function showPtab(id,btn){
 }
 
 // ═══ GARMIN SYNC ═══
-async function syncGarmin(){
+async function syncGarmin(force=false){
   const key=getApiKey();
   if(!key){document.getElementById('api-modal').style.display='flex';return;}
   const dot=document.getElementById('sync-dot'),lbl=document.getElementById('sync-lbl');
-  dot.className='sync-dot loading';lbl.textContent='Syncing...';
+  dot.className='sync-dot loading';lbl.textContent='Syncing Garmin...';
   try{
-    const resp=await fetch('https://brody-proxy.brody-patillo.workers.dev',{
-      method:'POST',
-      headers:{'Content-Type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01'},
-      body:JSON.stringify({
-        model:'claude-sonnet-4-5',max_tokens:1500,
-        messages:[{role:'user',content:`You are a data assistant. Return ONLY valid JSON (no markdown, no explanation) with Brody's current Garmin fitness snapshot. Use these real values from his last sync on Jun 23 2026, and today is ${new Date().toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})}. Return this exact structure with these values:
-{"syncedAt":"${new Date().toISOString()}","trainingReadiness":93,"vo2max":57,"fitnessAge":19,"heartRate":{"resting":40},"hrv":{"lastNight":79,"status":"BALANCED","baselineLow":60,"baselineHigh":87},"sleep":{"duration":9.7,"deepMin":98,"remMin":124,"lightMin":361,"awakeMin":21,"stressScore":16},"bodyBattery":100,"stress":{"avg":14,"max":99},"daily":{"steps":3834,"stepsGoal":7500,"calories":2847,"activeCalories":583},"racePredictions":{"fiveK":"20:25","tenK":"44:45","halfMarathon":"1:41:42","marathon":"3:44:41"},"trainingStatus":"Maintaining","acuteLoad":201,"chronicLoad":219,"recentActivity":{"name":"Stair Stepper","type":"cardio","duration":24,"avgHr":142}}`}]
-      })
-    });
-    const data=await resp.json();
-    const text=data.content.map(b=>b.text||'').join('').replace(/```json|```/g,'').trim();
-    GARMIN=JSON.parse(text);
-    dot.className='sync-dot live';lbl.textContent='Synced '+new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
+    const url='https://brodys-garmin-app-1-zip--brodypatillo.replit.app/api/garmin'+(force?'?refresh=true':'');
+    const resp=await fetch(url,{method:'GET',headers:{'Content-Type':'application/json'}});
+    if(!resp.ok) throw new Error('Server responded '+resp.status);
+    GARMIN=await resp.json();
+    // Normalize fields so dashboard renders correctly regardless of Garmin API shape
+    GARMIN.trainingReadiness=GARMIN.trainingReadiness||GARMIN.training_readiness||0;
+    GARMIN.vo2max=GARMIN.vo2max||GARMIN.vo2Max||57;
+    GARMIN.fitnessAge=GARMIN.fitnessAge||GARMIN.fitness_age||19;
+    GARMIN.heartRate=GARMIN.heartRate||{resting:GARMIN.restingHeartRate||40};
+    GARMIN.hrv=GARMIN.hrv||{lastNight:79,status:'BALANCED',baselineLow:60,baselineHigh:87};
+    GARMIN.sleep=GARMIN.sleep||{duration:0,deepMin:0,remMin:0,lightMin:0,awakeMin:0};
+    GARMIN.bodyBattery=GARMIN.bodyBattery||0;
+    GARMIN.stress=GARMIN.stress||{avg:0,max:0};
+    GARMIN.daily=GARMIN.daily||{steps:0,stepsGoal:7500,calories:0,activeCalories:0};
+    GARMIN.racePredictions=GARMIN.racePredictions||{fiveK:'—',tenK:'—',halfMarathon:'—',marathon:'—'};
+    GARMIN.trainingStatus=GARMIN.trainingStatus||'—';
+    dot.className='sync-dot live';
+    lbl.textContent='Synced '+new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})+(GARMIN.fromCache?' (cached)':'');
     renderDash();updateHealthStats();updateRacePreds();
-  }catch(e){dot.className='sync-dot error';lbl.textContent='Sync failed — check API key';console.error(e);}
+  }catch(e){
+    dot.className='sync-dot error';
+    lbl.textContent='Sync failed — is Replit running?';
+    console.error('Garmin sync error:',e);
+  }
 }
 
 // ═══ RENDER DASH ═══
@@ -575,7 +584,7 @@ function clearLog(){document.getElementById('exercises-container').innerHTML='';
 // ═══ AI LOG (via Anthropic API directly — uses stored key) ═══
 async function callAI(prompt){
   const key=getApiKey();if(!key)throw new Error('No API key');
-  const resp=await fetch('https://brody-proxy.brody-patillo.workers.dev',{method:'POST',headers:{'Content-Type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01'},body:JSON.stringify({model:'claude-sonnet-4-5',max_tokens:1000,messages:[{role:'user',content:prompt}]})});
+  const resp=await fetch('https://brodys-garmin-app-1-zip--brodypatillo.replit.app',{method:'POST',headers:{'Content-Type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01'},body:JSON.stringify({model:'claude-sonnet-4-5',max_tokens:1000,messages:[{role:'user',content:prompt}]})});
   const data=await resp.json();return data.content.map(b=>b.text||'').join('').replace(/```json|```/g,'').trim();
 }
 async function aiStructureWorkout(){
@@ -711,10 +720,14 @@ async function sendChat(){
   appendChat('u',msg);const typing=appendTyping();
   chatHistory.push({role:'user',content:msg});
   try{
-    const resp=await fetch('https://brody-proxy.brody-patillo.workers.dev',{method:'POST',headers:{'Content-Type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01'},body:JSON.stringify({model:'claude-sonnet-4-5',max_tokens:1000,system:getSystemPrompt(),messages:chatHistory})});
+    const resp=await fetch('https://brodys-garmin-app-1-zip--brodypatillo.replit.app/api/chat',{
+      method:'POST',
+      headers:{'Content-Type':'application/json','x-api-key':key},
+      body:JSON.stringify({messages:chatHistory,garminContext:GARMIN})
+    });
     const data=await resp.json();const reply=data.content.map(b=>b.text||'').join('');
     typing.remove();appendChat('a',reply);chatHistory.push({role:'assistant',content:reply});
-  }catch(e){typing.remove();appendChat('a','Connection issue — check your API key in Settings and try again.');}
+  }catch(e){typing.remove();appendChat('a','Connection issue — make sure Replit is running.');}
   document.getElementById('chat-snd').disabled=false;
 }
 function appendChat(role,text){const msgs=document.getElementById('chat-msgs');const w=document.createElement('div');w.className='cmsg '+role;w.innerHTML=`<div class="cname">${role==='u'?'Brody':'Coach'}</div><div class="cbub">${text.replace(/\n/g,'<br>')}</div>`;msgs.appendChild(w);msgs.scrollTop=msgs.scrollHeight;return w;}
